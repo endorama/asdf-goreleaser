@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2155
+set -eou pipefail
+
+if [ -n "${DEBUG:-}" ]; then
+    set -x
+fi
+
+
+# shellcheck source=shlib.sh
+source "$(dirname "$(dirname "$0")")/shlib.sh"
+
+install_goreleaser(){
+    local install_type=$1
+    local version=$2
+    local install_path=$3
+
+    if [ "${TMPDIR:-}" = "" ]; then
+        local tmp_download_dir=$(mktemp -d -t asdf-goreleaser_XXXXXX) 
+    else
+        local tmp_download_dir=$TMPDIR
+    fi
+
+    arch=$(uname_arch)
+    os=$(uname_os)
+    download_url=$(get_download_url "$version" "$os" "$arch")
+
+    # path to the tar file
+    local source_path=$(get_download_file_path "$version" "$tmp_download_dir")
+    log_info "$source_path"
+    download_source_file "$version" "$source_path" "$download_url"
+
+    # running this in a subshell
+    # we don't want to disturb current working dir
+    echo "sourcepath : $source_path"
+    echo "installpath: $install_path"
+    (
+        extract_release $source_path $install_path
+        mkdir "$install_path/bin"
+        ln -s "$install_path/goreleaser" "$install_path/bin/goreleaser"
+    )
+}
+
+extract_release() {
+    local archive_path
+    local installation_path
+    archive_path=$1
+    installation_path=$2
+    echo "asd"
+    tar zxf "$archive_path" -C "$installation_path" || exit 1
+    echo "foo"
+}
+
+download_source_file() {
+    local version=$1
+    local download_path=$2
+    # shellcheck disable=SC2155
+    local download_url=$3
+
+    echo curl -Lo "$download_path" -C - "$download_url"
+    curl -Lo "$download_path" -C - "$download_url"
+}
+
+get_download_file_path() {
+    local version=$1
+    local tmp_download_dir=$2
+    local pkg_name="goreleaser"
+
+    echo "$tmp_download_dir/$pkg_name"
+}
+
+get_download_url() {
+    local version=$1
+    local os=$2
+    local arch=$3
+
+    case $arch in
+        amd64) arch="x86_64" ;;
+        *) { echo "arch $arch is not supported"; exit 1; }
+    esac
+
+    case $os in
+        linux) os="Linux" ;;
+        darwin) os="Darwin" ;;
+        *) { echo "os $os is not supported"; exit 1; }
+    esac
+
+    echo -n "https://github.com/"
+    echo -n "goreleaser/goreleaser"
+    echo    "/releases/download/v${version}/goreleaser_${os}_${arch}.tar.gz"
+}
+
+
+install_goreleaser "$ASDF_INSTALL_TYPE" "$ASDF_INSTALL_VERSION" "$ASDF_INSTALL_PATH"
+
